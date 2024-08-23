@@ -12,8 +12,8 @@ AppGuardian is used to manage user authorization during the beta testing phase, 
 - firebase_admin 6.5.0
 - python-dotenv 1.0.1
 - httpx 0.27.0
-- fastapi==0.112.1
-- uvicorn==0.30.6
+- fastapi 0.112.1
+- uvicorn 0.30.6
 
 ## Installation
 1. Clone repository using the following URL: `https://github.com/matt-novoselov/AppGuardian-Admin-Panel.git`
