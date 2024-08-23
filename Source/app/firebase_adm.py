@@ -1,21 +1,16 @@
-from dotenv import load_dotenv
-import os
 import json
 import firebase_admin
 from firebase_admin import auth, credentials
 from firebase_admin.exceptions import FirebaseError
+from app.config import FIREBASE_URL, FIREBASE_SERVICE_ACCOUNT_KEY, EMAIL_DOMAIN
 
-load_dotenv()
-firebase_url = os.getenv("FIREBASE_URL")
-email_domain = os.getenv("EMAIL_DOMAIN")
-firebase_api_key_str = os.getenv("FIREBASE_SERVICE_ACCOUNT_KEY")
 
 # Convert Firebase certificate back to a dictionary
-firebase_api_key = json.loads(firebase_api_key_str)
+firebase_api_key = json.loads(FIREBASE_SERVICE_ACCOUNT_KEY)
 cred = credentials.Certificate(firebase_api_key)
 
 firebase_admin.initialize_app(cred, {
-    'databaseURL': firebase_url,
+    'databaseURL': FIREBASE_URL,
 })
 
 token_state_dict = {True: "Активирован", False: "Не активирован"}
@@ -104,5 +99,5 @@ def RevokeAll():
 
 
 def GenerateEmail(token: str) -> str:
-    composed_email = f'{token}@{email_domain}'
+    composed_email = f'{token}@{EMAIL_DOMAIN}'
     return composed_email

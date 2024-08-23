@@ -1,25 +1,24 @@
-from aiogram import Bot, Dispatcher, executor, types
-from aiogram.dispatcher.filters.state import State, StatesGroup
-from aiogram.contrib.fsm_storage.memory import MemoryStorage
-from aiogram.dispatcher import FSMContext
-from dotenv import load_dotenv
-import os
-import firebase_adm
+from aiogram import Bot, Dispatcher, types, F
+from aiogram.fsm.state import State, StatesGroup
+from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.fsm.context import FSMContext
+from aiogram.filters import Command, CommandStart, CommandObject
+from aiogram.types import ContentType
 
-load_dotenv()
-telegram_token = os.getenv("TELEGRAM_TOKEN")
-admin_ids_str = os.getenv("ADMIN_IDS")
+import app.firebase_adm as firebase_adm
+from app.config import TELEGRAM_TOKEN, ADMIN_IDS
+
 
 # Safely split the string, strip whitespace, and filter out any empty strings before converting to integers
-admIDs = [int(x.strip()) for x in admin_ids_str.split(',') if x.strip().isdigit()]
+admIDs = [int(x.strip()) for x in ADMIN_IDS.split(',') if x.strip().isdigit()]
 admin_only = lambda message: message.from_user.id in admIDs
 
 storage = MemoryStorage()
-bot = Bot(token=telegram_token)
-dp = Dispatcher(bot, storage=storage)
+bot = Bot(token=TELEGRAM_TOKEN)
+dp = Dispatcher(storage=storage)
 
 
-@dp.message_handler(commands=['start'])  # Run after /start command
+@dp.message(CommandStart())  # Run after /start command
 async def start_message(message: types.Message):
     if message.from_user.id in admIDs:
         await message.answer("☑️ Панель администратора запущена. "
@@ -28,7 +27,7 @@ async def start_message(message: types.Message):
         await message.answer("🚫 Вы не являетесь администратором")
 
 
-@dp.message_handler(admin_only, commands=['help'])  # Run after /help command
+@dp.message(admin_only, Command("help"))  # Run after /help command
 async def help_message(message: types.Message):
     await message.answer(
         f"""
@@ -51,30 +50,44 @@ C3C3C3</blockquote>
         parse_mode="HTML")
 
 
-@dp.message_handler(admin_only, commands=['revoke'])
-async def revoke_player_id(message: types.Message):
-    ids = message.get_args().strip().split('\n')  # Split the command arguments by newlines to get individual IDs
+@dp.message(admin_only, Command("revoke"))
+async def revoke_player_id(message: types.Message, command: CommandObject):
+    command_args: str = command.args
+    if not command_args:
+        await message.answer(
+            f"""
+/revoke - <b>отозвать список токенов. Пример:</b>
+<blockquote>/revoke
 
-    results = []  # To store the result for each ID
+A1A1A1
+B2B2B2
+C3C3C3</blockquote>
+        """,
+            parse_mode="HTML")
+    else:
+        # Split the command arguments by newlines to get individual IDs
+        ids = command_args.strip().split('\n')
 
-    for device_id in ids:
-        device_id = device_id.strip()  # Remove any leading or trailing whitespace
+        results = []  # To store the result for each ID
 
-        if len(device_id) == 6:
-            result = firebase_adm.DeleteUser(device_id)
-            results.append(result)
-        elif len(device_id) != 0:
-            results.append(f"🚫 Ошибка. Player ID `{device_id}` должен состоять из 6 символов")
+        for device_id in ids:
+            device_id = device_id.strip()  # Remove any leading or trailing whitespace
 
-    # Send the results back to the user
-    await message.reply('\n\n'.join(results), parse_mode="Markdown")
+            if len(device_id) == 6:
+                result = firebase_adm.DeleteUser(device_id)
+                results.append(result)
+            elif len(device_id) != 0:
+                results.append(f"🚫 Ошибка. Player ID `{device_id}` должен состоять из 6 символов")
+
+        # Send the results back to the user
+        await message.reply('\n\n'.join(results), parse_mode="Markdown")
 
 
 class RevokeTokensState(StatesGroup):
     waiting_for_confirmation = State()
 
 
-@dp.message_handler(admin_only, commands=['revoke_all'])
+@dp.message(admin_only, Command("revoke_all"))
 async def revoke_all_tokens(message: types.Message, state: FSMContext):
     amount = firebase_adm.CountUsers()
     await message.answer(f"⚠️ *Вы действительно хотите отозвать {amount} токенов?*\n"
@@ -84,25 +97,25 @@ async def revoke_all_tokens(message: types.Message, state: FSMContext):
                          f"`Да, я понимаю, что хочу безвозвратно отозвать все {amount} токенов`",
                          parse_mode="Markdown")
     await state.update_data(amount=amount)  # Save the amount to state data
-    await RevokeTokensState.waiting_for_confirmation.set()  # Set the state
+    await state.set_state(RevokeTokensState.waiting_for_confirmation)
 
 
-@dp.message_handler(admin_only, commands=['list_all'])  # Run after /list_all command
+@dp.message(admin_only, Command("list_all"))  # Run after /list_all command
 async def list_all(message: types.Message):
     await message.reply(firebase_adm.ListUsers(), parse_mode="HTML")
 
 
-@dp.message_handler(admin_only, state=RevokeTokensState.waiting_for_confirmation, commands=['cancel'])
+@dp.message(admin_only, Command("cancel"), RevokeTokensState.waiting_for_confirmation)
 async def cancel_command_handler(message: types.Message, state: FSMContext):
     current_state = await state.get_state()  # Check if there is an active state
     if current_state is not None:  # If a state is set
-        await state.finish()  # Finish the state
+        await state.clear()  # Finish the state
         await message.answer("❌ Процесс отозвания токенов был отменен.")
     else:
         await message.answer("❓ Нет активного процесса для отмены.")
 
 
-@dp.message_handler(admin_only, state=RevokeTokensState.waiting_for_confirmation, content_types=types.ContentTypes.TEXT)
+@dp.message(admin_only, RevokeTokensState.waiting_for_confirmation, F.content_type == ContentType.TEXT)
 async def confirm_revoke_tokens(message: types.Message, state: FSMContext):
     # Get the amount from state data
     data = await state.get_data()
@@ -113,12 +126,12 @@ async def confirm_revoke_tokens(message: types.Message, state: FSMContext):
 
     if message.text == expected_confirmation:
         await firebase_adm.RevokeAll()
-        await state.finish()  # Finish the state
+        await state.clear()  # Finish the state
     else:
         await message.answer("❌ Подтверждение не совпадает. Попробуйте еще раз или отправьте /cancel для отмены.")
 
 
-@dp.message_handler(admin_only, content_types=types.ContentTypes.TEXT)
+@dp.message(admin_only, F.content_type == ContentType.TEXT)
 async def player_id_handler(message: types.Message):
     ids = message.text.strip().split('\n')  # Split the message by newlines to get individual IDs
 
@@ -135,7 +148,3 @@ async def player_id_handler(message: types.Message):
 
     # Send the results back to the user
     await message.reply('\n\n'.join(results), parse_mode="Markdown")
-
-
-if __name__ == '__main__':
-    executor.start_polling(dp)
