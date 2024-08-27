@@ -4,7 +4,6 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.fsm.context import FSMContext
 from aiogram.filters import Command, CommandStart, CommandObject
 from aiogram.types import ContentType
-
 import app.firebase_adm as firebase_adm
 from app.config import TELEGRAM_TOKEN, ADMIN_IDS
 
@@ -13,12 +12,14 @@ from app.config import TELEGRAM_TOKEN, ADMIN_IDS
 admIDs = [int(x.strip()) for x in ADMIN_IDS.split(',') if x.strip().isdigit()]
 admin_only = lambda message: message.from_user.id in admIDs
 
+# Initialize bot and memory storage
 storage = MemoryStorage()
 bot = Bot(token=TELEGRAM_TOKEN)
 dp = Dispatcher(storage=storage)
 
 
-@dp.message(CommandStart())  # Run after /start command
+# Run after /start command
+@dp.message(CommandStart())
 async def start_message(message: types.Message):
     if message.from_user.id in admIDs:
         await message.answer("☑️ Панель администратора запущена. "
@@ -27,7 +28,8 @@ async def start_message(message: types.Message):
         await message.answer("🚫 Вы не являетесь администратором")
 
 
-@dp.message(admin_only, Command("help"))  # Run after /help command
+# Run after /help command
+@dp.message(admin_only, Command("help"))
 async def help_message(message: types.Message):
     await message.answer(
         f"""
@@ -50,6 +52,7 @@ C3C3C3</blockquote>
         parse_mode="HTML")
 
 
+# Run after /revoke command
 @dp.message(admin_only, Command("revoke"))
 async def revoke_player_id(message: types.Message, command: CommandObject):
     command_args: str = command.args
@@ -66,18 +69,20 @@ C3C3C3</blockquote>
             parse_mode="HTML")
     else:
         # Split the command arguments by newlines to get individual IDs
-        ids = command_args.strip().split('\n')
+        tokens = command_args.strip().split('\n')
 
         results = []  # To store the result for each ID
 
-        for device_id in ids:
-            device_id = device_id.strip()  # Remove any leading or trailing whitespace
+        # Iterate through all tokens
+        for token in tokens:
+            token = token.strip()  # Remove any leading or trailing whitespace
 
-            if len(device_id) == 6:
-                result = firebase_adm.DeleteUser(device_id)
+            # Check if token length is correct
+            if len(token) == 6:
+                result = firebase_adm.RevokeToken(token)
                 results.append(result)
-            elif len(device_id) != 0:
-                results.append(f"🚫 Ошибка. Player ID `{device_id}` должен состоять из 6 символов")
+            elif len(token) != 0:
+                results.append(f"🚫 Ошибка. Player ID `{token}` должен состоять из 6 символов")
 
         # Send the results back to the user
         await message.reply('\n\n'.join(results), parse_mode="Markdown")
@@ -87,9 +92,11 @@ class RevokeTokensState(StatesGroup):
     waiting_for_confirmation = State()
 
 
+# Run after /revoke_all command
 @dp.message(admin_only, Command("revoke_all"))
 async def revoke_all_tokens(message: types.Message, state: FSMContext):
-    amount = firebase_adm.CountUsers()
+    amount = firebase_adm.CountTokens() # Get amount of tokens
+
     await message.answer(f"⚠️ *Вы действительно хотите отозвать {amount} токенов?*\n"
                          "\n"
                          "Отправьте в чат, чтобы подтвердить:\n"
@@ -100,11 +107,13 @@ async def revoke_all_tokens(message: types.Message, state: FSMContext):
     await state.set_state(RevokeTokensState.waiting_for_confirmation)
 
 
+# Run after /list_all command
 @dp.message(admin_only, Command("list_all"))  # Run after /list_all command
 async def list_all(message: types.Message):
-    await message.reply(firebase_adm.ListUsers(), parse_mode="HTML")
+    await message.reply(firebase_adm.ListTokens(), parse_mode="HTML")
 
 
+# Run after /cancel command
 @dp.message(admin_only, Command("cancel"), RevokeTokensState.waiting_for_confirmation)
 async def cancel_command_handler(message: types.Message, state: FSMContext):
     current_state = await state.get_state()  # Check if there is an active state
@@ -115,6 +124,7 @@ async def cancel_command_handler(message: types.Message, state: FSMContext):
         await message.answer("❓ Нет активного процесса для отмены.")
 
 
+# Confirmation before revoking all tokens
 @dp.message(admin_only, RevokeTokensState.waiting_for_confirmation, F.content_type == ContentType.TEXT)
 async def confirm_revoke_tokens(message: types.Message, state: FSMContext):
     # Get the amount from state data
@@ -124,27 +134,31 @@ async def confirm_revoke_tokens(message: types.Message, state: FSMContext):
     # Check if the user provided the correct confirmation message
     expected_confirmation = f"Да, я понимаю, что хочу безвозвратно отозвать все {amount} токенов"
 
+    # Check if confirmation matches
     if message.text == expected_confirmation:
-        await firebase_adm.RevokeAll()
+        await firebase_adm.RevokeAllTokens()
         await state.clear()  # Finish the state
     else:
         await message.answer("❌ Подтверждение не совпадает. Попробуйте еще раз или отправьте /cancel для отмены.")
 
 
+# Run after receiving Token for authorization
 @dp.message(admin_only, F.content_type == ContentType.TEXT)
 async def player_id_handler(message: types.Message):
-    ids = message.text.strip().split('\n')  # Split the message by newlines to get individual IDs
+    tokens = message.text.strip().split('\n')  # Split the message by newlines to get individual IDs
 
     results = []  # To store the result for each ID
 
-    for device_id in ids:
-        device_id = device_id.strip()  # Remove any leading or trailing whitespace
+    # Iterate though all tokens
+    for token in tokens:
+        token = token.strip()  # Remove any leading or trailing whitespace
 
-        if len(device_id) == 6:
-            result = firebase_adm.CreateUser(device_id)
+        # Check if token length is correct
+        if len(token) == 6:
+            result = firebase_adm.AuthorizeToken(token)
             results.append(result)
-        elif len(device_id) != 0:
-            results.append(f"🚫 Ошибка. Player ID `{device_id}` должен состоять из 6 символов")
+        elif len(token) != 0:
+            results.append(f"🚫 Ошибка. Player ID `{token}` должен состоять из 6 символов")
 
     # Send the results back to the user
     await message.reply('\n\n'.join(results), parse_mode="Markdown")

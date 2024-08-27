@@ -9,14 +9,14 @@ from app.config import FIREBASE_URL, FIREBASE_SERVICE_ACCOUNT_KEY, EMAIL_DOMAIN
 firebase_api_key = json.loads(FIREBASE_SERVICE_ACCOUNT_KEY)
 cred = credentials.Certificate(firebase_api_key)
 
+# Initialize Firebase app
 firebase_admin.initialize_app(cred, {
     'databaseURL': FIREBASE_URL,
 })
 
-token_state_dict = {True: "Активирован", False: "Не активирован"}
 
-
-def CreateUser(deviceID_upper):
+# Function to authorize new Token by device ID
+def AuthorizeToken(deviceID_upper):
     try:
         token = deviceID_upper.lower()
         email = GenerateEmail(token)
@@ -43,10 +43,17 @@ def CreateUser(deviceID_upper):
         return f"There was an error: {e}"
 
 
-def DeleteUser(token):
+
+# Function to revoke token
+def RevokeToken(token):
     try:
+        # Compose email by token
         composed_email = GenerateEmail(token)
+
+        # Get User ID
         uid = auth.get_user_by_email(composed_email).uid
+
+        # Try to delete user by User ID
         auth.delete_user(uid)
 
         print(f"[v] Token {token.upper()} was revoked")
@@ -55,9 +62,12 @@ def DeleteUser(token):
         return f"❓ Токен *{token.upper()}* не был найден"
 
 
-def ListUsers():
+
+# Function to list all authorized tokens
+def ListTokens():
     message = "Все авторизованные токены:\n\n"
     try:
+        # Iterate through all users in database
         for user in auth.list_users().iterate_all():
             extracted_token = str(user.email).split("@")[0]
             message += f"<b>{extracted_token.upper()}</b>\n"
@@ -69,7 +79,8 @@ def ListUsers():
         return f"There was an error: {e}"
 
 
-def CountUsers() -> int:
+# Function to count all authorized tokens
+def CountTokens() -> int:
     try:
         amount = 0
         page = auth.list_users()  # Initialize the ListUsersPage
@@ -82,13 +93,16 @@ def CountUsers() -> int:
         return 0
 
 
-def RevokeAll():
+
+# Function to revoke all authorized tokens
+def RevokeAllTokens():
     try:
-        count = 0
+        count = CountTokens() # Count users before deletion
+
+        # Iterate through authorized users and delete each
         for user in auth.list_users().iterate_all():
             uid = user.uid
             auth.delete_user(uid)
-            count += 1
             print(f'[v] Token {str(user.email).split("@")[0]} was revoked using /revoke_all')
 
         return f"🗑️ Было успешно отозвано {count} токенов"
@@ -98,6 +112,7 @@ def RevokeAll():
         return f"There was an error: {e}"
 
 
+# Generate unique email based on token
 def GenerateEmail(token: str) -> str:
     composed_email = f'{token}@{EMAIL_DOMAIN}'
     return composed_email
