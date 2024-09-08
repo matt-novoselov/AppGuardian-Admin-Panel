@@ -1,6 +1,6 @@
 # AppGuardian Admin Panel
 
-This repository contains the source code for the AppGuardian Admin Panel, developed using Aiogram 3.x for Telegram bot integration. AppGuardian is an internal tool designed for a company operating in the GameDev industry, which has a game currently in development with over 500,000 downloads.
+This repository contains the source code for the AppGuardian Admin Panel, developed using Aiogram 3.x for Telegram bot integration. AppGuardian is an internal tool designed for a company operating in the GameDev industry, which has a game currently in development with over 1.000.000 downloads.
 
 AppGuardian is used to manage user authorization during the beta testing phase, ensuring that only authorized users can access the app. The admin panel helps administrators to manage users and monitor access.
 
