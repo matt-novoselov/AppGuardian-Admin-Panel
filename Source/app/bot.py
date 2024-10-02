@@ -136,7 +136,8 @@ async def confirm_revoke_tokens(message: types.Message, state: FSMContext):
 
     # Check if confirmation matches
     if message.text == expected_confirmation:
-        await firebase_adm.RevokeAllTokens()
+        revoke_message = firebase_adm.RevokeAllTokens()
+        await message.answer(revoke_message)
         await state.clear()  # Finish the state
     else:
         await message.answer("❌ Подтверждение не совпадает. Попробуйте еще раз или отправьте /cancel для отмены.")
